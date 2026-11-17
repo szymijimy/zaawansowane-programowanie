@@ -1,42 +1,51 @@
-def imiona(l):
-    print(l)
+def imiona(items):
+    print(items)
     return
+
 
 print("Podpunkt: A")
 imion = ["Basia", "Kasia", "Asia", "Tosia", "Zosia"]
 imiona(imion)
 
-def liczba(l):
-    for i in range(len(l)):
-        l[i] = l[i]*2
-    return l
-def liczba2(l):
-    l = [x * 2 for x in l]
-    return l
+
+def liczba(items):
+    for i in range(len(items)):
+        items[i] = items[i] * 2
+    return items
+
+
+def liczba2(items):
+    items = [x * 2 for x in items]
+    return items
+
 
 print("Podpunkt: B")
-l = [22, 33, 44, 55, 66]
-print(liczba(l))
-l = [22, 33, 44, 55, 66]
-print(liczba2(l))
+values = [22, 33, 44, 55, 66]
+print(liczba(values))
+values = [22, 33, 44, 55, 66]
+print(liczba2(values))
 
-def parzyste(l):
+
+def parzyste(items):
     g = []
-    for i in range(len(l)):
-        if l[i] % 2 == 0:
-            g.append(l[i])
+    for i in range(len(items)):
+        if items[i] % 2 == 0:
+            g.append(items[i])
     return g
+
 
 print("Podpunkt: C")
-l = [22, 33, 44, 55, 66] * 2
-print(parzyste(l))
+values = [22, 33, 44, 55, 66] * 2
+print(parzyste(values))
 
-def drugi(l):
+
+def drugi(items):
     g = []
-    for i in range(0, len(l), 2):
-        g.append(l[i])
+    for i in range(0, len(items), 2):
+        g.append(items[i])
     return g
 
+
 print("Podpunkt: D")
-l = [22, 33, 44, 55, 66] * 2
-print(drugi(l))
+values = [22, 33, 44, 55, 66] * 2
+print(drugi(values))
