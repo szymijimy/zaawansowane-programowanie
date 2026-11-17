@@ -65,7 +65,9 @@ def test_count_vowels(text: str, expected: int) -> None:
         (200.0, 1.0, 0.0),
     ],
 )
-def test_calculate_discount_valid(price: float, discount: float, expected: float) -> None:
+def test_calculate_discount_valid(
+    price: float, discount: float, expected: float
+) -> None:
     assert calculate_discount(price, discount) == pytest.approx(expected)
 
 
