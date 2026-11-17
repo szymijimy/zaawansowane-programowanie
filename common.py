@@ -1,12 +1,9 @@
-import csv
-import os
-import sys
-import time
+import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Generator, Optional
 
 
 class TaskStatus(str, Enum):
@@ -24,162 +21,159 @@ class Task:
     updated_at: str
     worker_id: str = ""
 
-    def to_row(self) -> list[str]:
-        return [
-            str(self.id),
-            self.payload,
-            self.status.value,
-            self.created_at,
-            self.updated_at,
-            self.worker_id,
-        ]
 
-    @classmethod
-    def from_row(cls, row: list[str]) -> "Task":
-        return cls(
-            id=int(row[0]),
-            payload=row[1],
-            status=TaskStatus(row[2]),
-            created_at=row[3],
-            updated_at=row[4],
-            worker_id=row[5] if len(row) > 5 else "",
-        )
+class SqliteQueue:
+    def __init__(self, db_path: str = "queue.db", timeout: float = 30.0) -> None:
+        self.db_path = db_path
+        self.timeout = timeout
+        self._initialize_schema()
 
-
-CSV_HEADER = ["id", "payload", "status", "created_at", "updated_at", "worker_id"]
-
-
-@contextmanager
-def file_lock(lock_path: str):
-    if sys.platform == "win32":
-        import msvcrt
-
-        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+    @contextmanager
+    def _connection(self) -> Generator[sqlite3.Connection, None, None]:
+        conn = sqlite3.connect(self.db_path, timeout=self.timeout)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute(f"PRAGMA busy_timeout = {int(self.timeout * 1000)};")
         try:
-            while True:
-                try:
-                    msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
-                    break
-                except OSError:
-                    time.sleep(0.05)
-            yield
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
-            try:
-                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
-            finally:
-                os.close(lock_fd)
-    else:
-        import fcntl
+            conn.close()
 
-        with open(lock_path, "a") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-
-class FileQueue:
-    def __init__(self, file_path: str = "queue.csv") -> None:
-        self.file_path = file_path
-        self.lock_path = f"{file_path}.lock"
-        self._initialize_storage()
-
-    def _initialize_storage(self) -> None:
-        with file_lock(self.lock_path):
-            if not os.path.exists(self.file_path) or os.path.getsize(self.file_path) == 0:
-                with open(self.file_path, mode="w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(CSV_HEADER)
-
-    def _read_tasks_unlocked(self) -> list[Task]:
-        if not os.path.exists(self.file_path):
-            return []
-        tasks: list[Task] = []
-        with open(self.file_path, mode="r", newline="", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            header = next(reader, None)
-            if not header:
-                return []
-            for row in reader:
-                if row:
-                    tasks.append(Task.from_row(row))
-        return tasks
-
-    def _write_tasks_unlocked(self, tasks: list[Task]) -> None:
-        temp_file = f"{self.file_path}.tmp"
-        with open(temp_file, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(CSV_HEADER)
-            for task in tasks:
-                writer.writerow(task.to_row())
-        os.replace(temp_file, self.file_path)
+    def _initialize_schema(self) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    payload TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('pending', 'in_progress', 'done')),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    worker_id TEXT DEFAULT ''
+                );
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);")
 
     def enqueue(self, payload: str) -> Task:
-        with file_lock(self.lock_path):
-            tasks = self._read_tasks_unlocked()
-            next_id = max((t.id for t in tasks), default=0) + 1
-            now = datetime.now().isoformat(timespec="seconds")
-            task = Task(
-                id=next_id,
+        now = datetime.now().isoformat(timespec="seconds")
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO queue (payload, status, created_at, updated_at, worker_id)
+                VALUES (?, ?, ?, ?, '');
+                """,
+                (payload, TaskStatus.PENDING.value, now, now),
+            )
+            task_id = cursor.lastrowid
+            return Task(
+                id=task_id,
                 payload=payload,
                 status=TaskStatus.PENDING,
                 created_at=now,
                 updated_at=now,
             )
-            tasks.append(task)
-            self._write_tasks_unlocked(tasks)
-            return task
 
     def enqueue_batch(self, payloads: list[str]) -> list[Task]:
-        with file_lock(self.lock_path):
-            tasks = self._read_tasks_unlocked()
-            current_id = max((t.id for t in tasks), default=0)
-            now = datetime.now().isoformat(timespec="seconds")
-            created_tasks: list[Task] = []
-            for payload in payloads:
-                current_id += 1
-                task = Task(
-                    id=current_id,
-                    payload=payload,
-                    status=TaskStatus.PENDING,
-                    created_at=now,
-                    updated_at=now,
+        if not payloads:
+            return []
+        now = datetime.now().isoformat(timespec="seconds")
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            inserted: list[Task] = []
+            for p in payloads:
+                cur = cursor.execute(
+                    """
+                    INSERT INTO queue (payload, status, created_at, updated_at, worker_id)
+                    VALUES (?, ?, ?, ?, '');
+                    """,
+                    (p, TaskStatus.PENDING.value, now, now),
                 )
-                tasks.append(task)
-                created_tasks.append(task)
-            self._write_tasks_unlocked(tasks)
-            return created_tasks
+                inserted.append(
+                    Task(
+                        id=cur.lastrowid,
+                        payload=p,
+                        status=TaskStatus.PENDING,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            return inserted
 
     def claim_next_pending(self, worker_id: str) -> Optional[Task]:
-        with file_lock(self.lock_path):
-            tasks = self._read_tasks_unlocked()
-            for task in tasks:
-                if task.status == TaskStatus.PENDING:
-                    task.status = TaskStatus.IN_PROGRESS
-                    task.worker_id = worker_id
-                    task.updated_at = datetime.now().isoformat(timespec="seconds")
-                    self._write_tasks_unlocked(tasks)
-                    return task
-            return None
+        conn = sqlite3.connect(self.db_path, timeout=self.timeout)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute(f"PRAGMA busy_timeout = {int(self.timeout * 1000)};")
+        try:
+            conn.execute("BEGIN IMMEDIATE;")
+            row = conn.execute(
+                """
+                SELECT id, payload, status, created_at, updated_at, worker_id
+                FROM queue
+                WHERE status = ?
+                ORDER BY id ASC
+                LIMIT 1;
+                """,
+                (TaskStatus.PENDING.value,),
+            ).fetchone()
+
+            if row is None:
+                conn.commit()
+                return None
+
+            now = datetime.now().isoformat(timespec="seconds")
+            task_id = row["id"]
+            conn.execute(
+                """
+                UPDATE queue
+                SET status = ?, worker_id = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (TaskStatus.IN_PROGRESS.value, worker_id, now, task_id),
+            )
+            conn.commit()
+            return Task(
+                id=task_id,
+                payload=row["payload"],
+                status=TaskStatus.IN_PROGRESS,
+                created_at=row["created_at"],
+                updated_at=now,
+                worker_id=worker_id,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def mark_done(self, task_id: int) -> bool:
-        with file_lock(self.lock_path):
-            tasks = self._read_tasks_unlocked()
-            for task in tasks:
-                if task.id == task_id:
-                    task.status = TaskStatus.DONE
-                    task.updated_at = datetime.now().isoformat(timespec="seconds")
-                    self._write_tasks_unlocked(tasks)
-                    return True
-            return False
+        now = datetime.now().isoformat(timespec="seconds")
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE queue
+                SET status = ?, updated_at = ?
+                WHERE id = ?;
+                """,
+                (TaskStatus.DONE.value, now, task_id),
+            )
+            return cursor.rowcount > 0
 
     def get_stats(self) -> dict[str, int]:
-        with file_lock(self.lock_path):
-            tasks = self._read_tasks_unlocked()
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT status, COUNT(*) as count FROM queue GROUP BY status;")
+            counts = {row["status"]: row["count"] for row in cursor.fetchall()}
+            pending = counts.get(TaskStatus.PENDING.value, 0)
+            in_progress = counts.get(TaskStatus.IN_PROGRESS.value, 0)
+            done = counts.get(TaskStatus.DONE.value, 0)
             return {
-                TaskStatus.PENDING.value: sum(1 for t in tasks if t.status == TaskStatus.PENDING),
-                TaskStatus.IN_PROGRESS.value: sum(1 for t in tasks if t.status == TaskStatus.IN_PROGRESS),
-                TaskStatus.DONE.value: sum(1 for t in tasks if t.status == TaskStatus.DONE),
-                "total": len(tasks),
+                TaskStatus.PENDING.value: pending,
+                TaskStatus.IN_PROGRESS.value: in_progress,
+                TaskStatus.DONE.value: done,
+                "total": pending + in_progress + done,
             }

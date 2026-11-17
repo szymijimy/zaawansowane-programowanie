@@ -2,11 +2,11 @@ import argparse
 import os
 import sys
 import time
-from common import FileQueue, TaskStatus
+from common import SqliteQueue, TaskStatus
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Task consumer worker")
+    parser = argparse.ArgumentParser(description="SQLite task consumer worker")
     parser.add_argument(
         "--worker-id",
         type=str,
@@ -14,10 +14,10 @@ def parse_arguments() -> argparse.Namespace:
         help="Worker identifier (default: operator-<PID>)",
     )
     parser.add_argument(
-        "--file",
+        "--db",
         type=str,
-        default="queue.csv",
-        help="Queue file path (default: queue.csv)",
+        default="queue.db",
+        help="SQLite database path (default: queue.db)",
     )
     parser.add_argument(
         "--duration",
@@ -37,9 +37,9 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     args = parse_arguments()
     worker_id = args.worker_id or f"operator-{os.getpid()}"
-    queue = FileQueue(file_path=args.file)
+    queue = SqliteQueue(db_path=args.db)
 
-    print(f"[{worker_id}] Worker started. Target file: '{args.file}', task duration: {args.duration}s, poll interval: {args.poll_interval}s")
+    print(f"[{worker_id}] Worker started. Target DB: '{args.db}', task duration: {args.duration}s, poll interval: {args.poll_interval}s")
 
     try:
         while True:

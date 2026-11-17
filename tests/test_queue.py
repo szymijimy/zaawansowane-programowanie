@@ -1,13 +1,13 @@
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from common import FileQueue, TaskStatus
+from common import SqliteQueue, TaskStatus
 
 
-def test_file_queue_lifecycle() -> None:
+def test_sqlite_queue_lifecycle() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        q_path = os.path.join(tmpdir, "test_queue.csv")
-        queue = FileQueue(file_path=q_path)
+        db_path = os.path.join(tmpdir, "test_queue.db")
+        queue = SqliteQueue(db_path=db_path)
 
         task1 = queue.enqueue("Test task 1")
         assert task1.id == 1
@@ -42,10 +42,10 @@ def test_file_queue_lifecycle() -> None:
         assert stats["total"] == 2
 
 
-def test_file_queue_batch_enqueue() -> None:
+def test_sqlite_queue_batch_enqueue() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        q_path = os.path.join(tmpdir, "test_batch.csv")
-        queue = FileQueue(file_path=q_path)
+        db_path = os.path.join(tmpdir, "test_batch.db")
+        queue = SqliteQueue(db_path=db_path)
 
         payloads = [f"Job {i}" for i in range(1, 11)]
         created = queue.enqueue_batch(payloads)
@@ -56,32 +56,33 @@ def test_file_queue_batch_enqueue() -> None:
         assert stats["total"] == 10
 
 
-def test_concurrent_claims() -> None:
+def test_sqlite_concurrent_claims() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        q_path = os.path.join(tmpdir, "test_concurrent.csv")
-        queue = FileQueue(file_path=q_path)
-        queue.enqueue_batch([f"Job {i}" for i in range(1, 21)])
+        db_path = os.path.join(tmpdir, "test_concurrent.db")
+        queue = SqliteQueue(db_path=db_path)
+        queue.enqueue_batch([f"Job {i}" for i in range(1, 31)])
 
         def claim_worker(worker_id: str):
             claimed = []
+            worker_queue = SqliteQueue(db_path=db_path)
             while True:
-                task = queue.claim_next_pending(worker_id)
+                task = worker_queue.claim_next_pending(worker_id)
                 if task is None:
                     break
-                queue.mark_done(task.id)
+                worker_queue.mark_done(task.id)
                 claimed.append(task.id)
             return claimed
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(claim_worker, f"worker-{i}") for i in range(4)]
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(claim_worker, f"worker-{i}") for i in range(5)]
             results = [f.result() for f in futures]
 
         all_claimed_ids = [task_id for worker_tasks in results for task_id in worker_tasks]
-        assert len(all_claimed_ids) == 20
-        assert len(set(all_claimed_ids)) == 20
-        assert set(all_claimed_ids) == set(range(1, 21))
+        assert len(all_claimed_ids) == 30
+        assert len(set(all_claimed_ids)) == 30
+        assert set(all_claimed_ids) == set(range(1, 31))
 
         stats = queue.get_stats()
         assert stats["pending"] == 0
         assert stats["in_progress"] == 0
-        assert stats["done"] == 20
+        assert stats["done"] == 30

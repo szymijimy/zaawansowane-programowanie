@@ -1,10 +1,10 @@
 import argparse
 import sys
-from common import FileQueue, TaskStatus
+from common import SqliteQueue, TaskStatus
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Task producer")
+    parser = argparse.ArgumentParser(description="SQLite task producer")
     parser.add_argument(
         "count",
         nargs="?",
@@ -13,10 +13,10 @@ def parse_arguments() -> argparse.Namespace:
         help="Number of tasks to produce (default: 1)",
     )
     parser.add_argument(
-        "--file",
+        "--db",
         type=str,
-        default="queue.csv",
-        help="Queue file path (default: queue.csv)",
+        default="queue.db",
+        help="SQLite database path (default: queue.db)",
     )
     parser.add_argument(
         "--payload",
@@ -29,7 +29,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_arguments()
-    queue = FileQueue(file_path=args.file)
+    queue = SqliteQueue(db_path=args.db)
 
     if args.count <= 0:
         print("[PRODUCER] Error: count must be a positive integer", file=sys.stderr)
