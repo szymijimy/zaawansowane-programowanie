@@ -4,7 +4,8 @@ def czy(x) -> bool:
     else:
         return False
 
-if czy(3) == True:
+
+if czy(3):
     print("Liczba parzysta")
 else:
     print("Liczba nieparzysta")

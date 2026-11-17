@@ -4,7 +4,8 @@ def czy(x: int, y: int, z: int) -> bool:
     else:
         return False
 
-if czy(2,1,5) == True:
+
+if czy(2, 1, 5):
     print("Wienkże")
 else:
     print("Mińsze")

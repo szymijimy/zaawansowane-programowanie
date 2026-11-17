@@ -4,4 +4,5 @@ def pot(l1: list, l2: list) -> list:
     k = [i ** 3 for i in k]
     return k
 
-print(pot([2,3],[3,4]))
+
+print(pot([2, 3], [3, 4]))

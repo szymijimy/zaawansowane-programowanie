@@ -1,5 +1,6 @@
 import requests
 
+
 class Brewery:
     def __init__(self, data: dict):
         self.id = data.get("id")
@@ -20,7 +21,25 @@ class Brewery:
         self.street = data.get("street")
 
     def __str__(self):
-        return f"Nazwa {self.id}, {self.name}, {self.brewery_type}, {self.address_1}, {self.address_2}, {self.city}, {self.state_province}, {self.postal_code}, {self.country}, {self.longitude}, {self.latitude}, {self.phone}, {self.website_url}, {self.state}, {self.street} :)"
+        fields = [
+            f"Nazwa {self.id}",
+            str(self.name),
+            str(self.brewery_type),
+            str(self.address_1),
+            str(self.address_2),
+            str(self.city),
+            str(self.state_province),
+            str(self.postal_code),
+            str(self.country),
+            str(self.longitude),
+            str(self.latitude),
+            str(self.phone),
+            str(self.website_url),
+            str(self.state),
+            f"{self.street} :)",
+        ]
+        return ", ".join(fields)
+
 
 response = requests.get("https://api.openbrewerydb.org/v1/breweries")
 data = response.json()
