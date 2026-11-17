@@ -46,7 +46,9 @@ class Task:
         )
 
 
-CSV_HEADER = ["id", "payload", "status", "created_at", "updated_at", "worker_id"]
+CSV_HEADER = [
+    "id", "payload", "status", "created_at", "updated_at", "worker_id"
+]
 
 
 @contextmanager
@@ -87,8 +89,14 @@ class FileQueue:
 
     def _initialize_storage(self) -> None:
         with file_lock(self.lock_path):
-            if not os.path.exists(self.file_path) or os.path.getsize(self.file_path) == 0:
-                with open(self.file_path, mode="w", newline="", encoding="utf-8") as f:
+            is_empty = (
+                not os.path.exists(self.file_path)
+                or os.path.getsize(self.file_path) == 0
+            )
+            if is_empty:
+                with open(
+                    self.file_path, mode="w", newline="", encoding="utf-8"
+                ) as f:
                     writer = csv.writer(f)
                     writer.writerow(CSV_HEADER)
 
@@ -158,7 +166,8 @@ class FileQueue:
                 if task.status == TaskStatus.PENDING:
                     task.status = TaskStatus.IN_PROGRESS
                     task.worker_id = worker_id
-                    task.updated_at = datetime.now().isoformat(timespec="seconds")
+                    now = datetime.now().isoformat(timespec="seconds")
+                    task.updated_at = now
                     self._write_tasks_unlocked(tasks)
                     return task
             return None
@@ -169,7 +178,8 @@ class FileQueue:
             for task in tasks:
                 if task.id == task_id:
                     task.status = TaskStatus.DONE
-                    task.updated_at = datetime.now().isoformat(timespec="seconds")
+                    now = datetime.now().isoformat(timespec="seconds")
+                    task.updated_at = now
                     self._write_tasks_unlocked(tasks)
                     return True
             return False
@@ -177,9 +187,18 @@ class FileQueue:
     def get_stats(self) -> dict[str, int]:
         with file_lock(self.lock_path):
             tasks = self._read_tasks_unlocked()
+            pending_count = sum(
+                1 for t in tasks if t.status == TaskStatus.PENDING
+            )
+            in_progress_count = sum(
+                1 for t in tasks if t.status == TaskStatus.IN_PROGRESS
+            )
+            done_count = sum(
+                1 for t in tasks if t.status == TaskStatus.DONE
+            )
             return {
-                TaskStatus.PENDING.value: sum(1 for t in tasks if t.status == TaskStatus.PENDING),
-                TaskStatus.IN_PROGRESS.value: sum(1 for t in tasks if t.status == TaskStatus.IN_PROGRESS),
-                TaskStatus.DONE.value: sum(1 for t in tasks if t.status == TaskStatus.DONE),
+                TaskStatus.PENDING.value: pending_count,
+                TaskStatus.IN_PROGRESS.value: in_progress_count,
+                TaskStatus.DONE.value: done_count,
                 "total": len(tasks),
             }
