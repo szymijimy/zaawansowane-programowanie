@@ -1,6 +1,7 @@
 import argparse
 import requests
 
+
 class Brewery:
     def __init__(self, data: dict):
         self.id: str = data.get("id")
@@ -21,7 +22,11 @@ class Brewery:
         self.street: str = data.get("street")
 
     def __str__(self) -> str:
-        return f"Browar: {self.name} | Typ: {self.brewery_type} | Miasto: {self.city}, {self.country} | Tel: {self.phone}"
+        return (
+            f"Browar: {self.name} | Typ: {self.brewery_type} | "
+            f"Miasto: {self.city}, {self.country} | Tel: {self.phone}"
+        )
+
 
 parser = argparse.ArgumentParser(description="Pobieranie listy browarów")
 parser.add_argument("--city", type=str, help="Filtruj browary po miastach")

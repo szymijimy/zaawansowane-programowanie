@@ -1,5 +1,6 @@
 import requests
 
+
 class Brewery:
     def __init__(self, data: dict):
         self.id: str = data.get("id")
@@ -20,9 +21,15 @@ class Brewery:
         self.street: str = data.get("street")
 
     def __str__(self) -> str:
-        return f"Browar: {self.name} | Typ: {self.brewery_type} | Miasto: {self.city}, {self.country} | Tel: {self.phone}"
+        return (
+            f"Browar: {self.name} | Typ: {self.brewery_type} | "
+            f"Miasto: {self.city}, {self.country} | Tel: {self.phone}"
+        )
 
-response = requests.get("https://api.openbrewerydb.org/v1/breweries?per_page=20")
+
+response = requests.get(
+    "https://api.openbrewerydb.org/v1/breweries?per_page=20"
+)
 data = response.json()
 
 breweries = [Brewery(item) for item in data]
