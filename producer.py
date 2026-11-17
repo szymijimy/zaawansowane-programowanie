@@ -32,16 +32,28 @@ def main() -> None:
     queue = SqliteQueue(db_path=args.db)
 
     if args.count <= 0:
-        print("[PRODUCER] Error: count must be a positive integer", file=sys.stderr)
+        print(
+            "[PRODUCER] Error: count must be a positive integer",
+            file=sys.stderr
+        )
         sys.exit(1)
 
     if args.count == 1:
         task = queue.enqueue(args.payload)
-        print(f"[PRODUCER] Enqueued task ID {task.id}: '{task.payload}' (status: {task.status.value})")
+        print(
+            f"[PRODUCER] Enqueued task ID {task.id}: "
+            f"'{task.payload}' (status: {task.status.value})"
+        )
     else:
-        payloads = [f"{args.payload} (ID {i})" for i in range(1, args.count + 1)]
+        payloads = [
+            f"{args.payload} (ID {i})" for i in range(1, args.count + 1)
+        ]
         created = queue.enqueue_batch(payloads)
-        print(f"[PRODUCER] Enqueued {len(created)} tasks (IDs {created[0].id}..{created[-1].id}) with status '{TaskStatus.PENDING.value}'")
+        print(
+            f"[PRODUCER] Enqueued {len(created)} tasks "
+            f"(IDs {created[0].id}..{created[-1].id}) "
+            f"with status '{TaskStatus.PENDING.value}'"
+        )
 
 
 if __name__ == "__main__":

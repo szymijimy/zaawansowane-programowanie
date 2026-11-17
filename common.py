@@ -23,7 +23,9 @@ class Task:
 
 
 class SqliteQueue:
-    def __init__(self, db_path: str = "queue.db", timeout: float = 30.0) -> None:
+    def __init__(
+        self, db_path: str = "queue.db", timeout: float = 30.0
+    ) -> None:
         self.db_path = db_path
         self.timeout = timeout
         self._initialize_schema()
@@ -50,21 +52,28 @@ class SqliteQueue:
                 CREATE TABLE IF NOT EXISTS queue (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     payload TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK(status IN ('pending', 'in_progress', 'done')),
+                    status TEXT NOT NULL CHECK(
+                        status IN ('pending', 'in_progress', 'done')
+                    ),
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     worker_id TEXT DEFAULT ''
                 );
                 """
             )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_queue_status "
+                "ON queue(status);"
+            )
 
     def enqueue(self, payload: str) -> Task:
         now = datetime.now().isoformat(timespec="seconds")
         with self._connection() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO queue (payload, status, created_at, updated_at, worker_id)
+                INSERT INTO queue (
+                    payload, status, created_at, updated_at, worker_id
+                )
                 VALUES (?, ?, ?, ?, '');
                 """,
                 (payload, TaskStatus.PENDING.value, now, now),
@@ -88,7 +97,9 @@ class SqliteQueue:
             for p in payloads:
                 cur = cursor.execute(
                     """
-                    INSERT INTO queue (payload, status, created_at, updated_at, worker_id)
+                    INSERT INTO queue (
+                        payload, status, created_at, updated_at, worker_id
+                    )
                     VALUES (?, ?, ?, ?, '');
                     """,
                     (p, TaskStatus.PENDING.value, now, now),
@@ -166,7 +177,9 @@ class SqliteQueue:
 
     def get_stats(self) -> dict[str, int]:
         with self._connection() as conn:
-            cursor = conn.execute("SELECT status, COUNT(*) as count FROM queue GROUP BY status;")
+            cursor = conn.execute(
+                "SELECT status, COUNT(*) as count FROM queue GROUP BY status;"
+            )
             counts = {row["status"]: row["count"] for row in cursor.fetchall()}
             pending = counts.get(TaskStatus.PENDING.value, 0)
             in_progress = counts.get(TaskStatus.IN_PROGRESS.value, 0)
