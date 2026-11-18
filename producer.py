@@ -1,10 +1,10 @@
 import argparse
 import sys
-from common import SqliteQueue, TaskStatus
+from common import RabbitQueue, TaskStatus
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="SQLite task producer")
+    parser = argparse.ArgumentParser(description="RabbitMQ task producer")
     parser.add_argument(
         "count",
         nargs="?",
@@ -13,10 +13,22 @@ def parse_arguments() -> argparse.Namespace:
         help="Number of tasks to produce (default: 1)",
     )
     parser.add_argument(
-        "--db",
+        "--host",
         type=str,
-        default="queue.db",
-        help="SQLite database path (default: queue.db)",
+        default="localhost",
+        help="RabbitMQ host (default: localhost)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="RabbitMQ port (default: 8081 or RABBITMQ_PORT)",
+    )
+    parser.add_argument(
+        "--queue",
+        type=str,
+        default="calls_queue",
+        help="Target queue name (default: calls_queue)",
     )
     parser.add_argument(
         "--payload",
@@ -29,12 +41,14 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_arguments()
-    queue = SqliteQueue(db_path=args.db)
+    queue = RabbitQueue(
+        host=args.host, port=args.port, queue_name=args.queue
+    )
 
     if args.count <= 0:
         print(
             "[PRODUCER] Error: count must be a positive integer",
-            file=sys.stderr
+            file=sys.stderr,
         )
         sys.exit(1)
 
